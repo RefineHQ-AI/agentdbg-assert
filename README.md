@@ -155,6 +155,10 @@ To capture a new baseline from a known-good run:
 agentdbg baseline "$RUN_ID" --out baselines/my_agent.json
 ```
 
+The action surfaces a single non-zero exit on any failure. For the
+underlying CLI exit codes (baseline missing, internal error, etc.),
+see the [`agentdbg` reference](https://github.com/RefineHQ-AI/agentdbg/blob/main/docs/cli.md).
+
 For installation, tracing your agent, and the rest of the workflow,
 see the AgentDbg
 [getting started guide](https://github.com/RefineHQ-AI/agentdbg/blob/main/docs/getting-started.md).
