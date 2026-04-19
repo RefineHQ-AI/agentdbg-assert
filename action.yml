@@ -1,7 +1,5 @@
 name: 'AgentDbg Assert'
 description: 'Run AgentDbg behavioral regression checks on agent traces'
-env:
-  AGENTDBG_REPO: 'https://github.com/RefineHQ-AI/agentdbg'
 inputs:
   agent-script:
     description: 'Python script that runs the agent (must use @trace)'
@@ -45,19 +43,20 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Install AgentDbg
+      env:
+        AGENTDBG_REPO: 'https://github.com/RefineHQ-AI/agentdbg.git'
+        AGENTDBG_VERSION: '${{ inputs.agentdbg-version }}'
       shell: bash
       run: |
-        VERSION="${{ inputs.agentdbg-version }}"
-        IDENTIFIER="${VERSION:1}"
-        if [[ "${{ inputs.agentdbg-version }}" == "@"* ]]; then
+        if [[ "${AGENTDBG_VERSION}" == "@"* ]]; then
           # GitHub identifier
-          pip install git+${{ env.AGENTDBG_REPO }}/${IDENTIFIER}
-        elif [[ "${{ inputs.agentdbg-version }}" == "v"* ]]; then
+          pip install git+${AGENTDBG_REPO}${AGENTDBG_VERSION}
+        elif [[ "${AGENTDBG_VERSION}" == "v"* ]]; then
           # PyPI version number
-          pip install "agentdbg==${IDENTIFIER}"
+          pip install "agentdbg==${AGENTDBG_VERSION:1}"
         else
           # Let's not allow any other values
-          echo "Invalid agentdbg-version: ${{ inputs.agentdbg-version }}."
+          echo "Invalid agentdbg-version: ${AGENTDBG_VERSION}."
           echo "AgentDbg version must start with 'v' for PyPI version number"
           echo "or '@' for GitHub identifier."
           exit 1
