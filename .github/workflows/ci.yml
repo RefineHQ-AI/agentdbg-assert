@@ -24,6 +24,8 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -34,4 +36,4 @@ jobs:
           agent-script: examples/ci_dummy_agent.py
           policy: .agentdbg/policy.yaml
           agentdbg-version: '@main'
-          post-comment: 'false'
+          post-comment: 'true'
