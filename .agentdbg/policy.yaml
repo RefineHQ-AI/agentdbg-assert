@@ -1,0 +1,4 @@
+assert:
+  no_loops: true
+  no_guardrails: true
+  expect_status: ok
