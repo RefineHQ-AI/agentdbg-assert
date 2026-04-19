@@ -47,14 +47,14 @@ runs:
     - name: Install AgentDbg
       shell: bash
       run: |
+        VERSION="${{ inputs.agentdbg-version }}"
+        IDENTIFIER="${VERSION:1}"
         if [[ "${{ inputs.agentdbg-version }}" == "@"* ]]; then
           # GitHub identifier
-          GITHUB_IDENTIFIER="${{ inputs.agentdbg-version:1 }}"
-          pip install git+${{ env.AGENTDBG_REPO }}/${{ GITHUB_IDENTIFIER }}
+          pip install git+${{ env.AGENTDBG_REPO }}/${IDENTIFIER}
         elif [[ "${{ inputs.agentdbg-version }}" == "v"* ]]; then
           # PyPI version number
-          PYPI_VERSION="${{ inputs.agentdbg-version:1 }}"
-          pip install "agentdbg==${{ PYPI_VERSION }}"
+          pip install "agentdbg==${IDENTIFIER}"
         else
           # Let's not allow any other values
           echo "Invalid agentdbg-version: ${{ inputs.agentdbg-version }}."
