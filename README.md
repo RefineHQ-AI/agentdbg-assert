@@ -41,6 +41,9 @@ Your `agent-script` must instrument the agent with `@trace` or
 | `extra-args` | no | `''` | Additional CLI arguments forwarded to `agentdbg assert` (e.g. `--max-steps 20 --no-loops`). CLI flags override policy values. |
 | `post-comment` | no | `true` | When `true` and the workflow runs on a `pull_request` event, the Markdown report is posted as a sticky PR comment. |
 
+**Note:** If the `post-comment` input is `true` and the workflow runs on a `pull_request` event, the action requires the `pull-requests: write` permission.
+More details can be found in the [GitHub Actions documentation](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions) and [sticky-pull-request-comment documentation](https://github.com/marocchino/sticky-pull-request-comment#error-resource-not-accessible-by-integration).
+
 ## Example workflows
 
 ### Minimal: policy-only check
