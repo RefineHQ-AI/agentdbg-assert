@@ -97,8 +97,14 @@ runs:
         fi
         agentdbg assert ${{ steps.get-run.outputs.run_id }} $ARGS --format markdown > agentdbg-report.md || echo "assert_failed=true" >> $GITHUB_OUTPUT
 
-    - name: Post PR comment
+    - name: Show PR comment in the action log
+      shell: bash
+      run: |
+        cat agentdbg-report.md
+
+    - name: Post PR comment if possible
       if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' }}
+      continue-on-error: true
       uses: marocchino/sticky-pull-request-comment@v3.0.4
       with:
         path: agentdbg-report.md
