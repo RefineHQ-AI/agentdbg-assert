@@ -40,9 +40,19 @@ runs:
     - name: Check if baseline and policy are provided
       shell: bash
       run: |
+        # At least one of baseline or policy must be provided
         if [ -z "${{ inputs.baseline }}" ] && [ -z "${{ inputs.policy }}" ]; then
           echo "Either baseline, policy, or both must be provided."
           exit 1
+        fi
+        # If either is provided, the files must exist
+        if [ -n "${{ inputs.baseline }}" ] && [ ! -f "${{ inputs.baseline }}" ]; then
+          echo "Baseline file does not exist: ${{ inputs.baseline }}"
+          exit 2
+        fi
+        if [ -n "${{ inputs.policy }}" ] && [ ! -f "${{ inputs.policy }}" ]; then
+          echo "Policy file does not exist: ${{ inputs.policy }}"
+          exit 2
         fi
 
     - name: Set up Python
@@ -67,7 +77,7 @@ runs:
           echo "Invalid agentdbg-version: ${AGENTDBG_VERSION}."
           echo "AgentDbg version must start with 'v' for PyPI version number"
           echo "or '@' for GitHub identifier."
-          exit 1
+          exit 10
         fi
 
     - name: Run agent
