@@ -5,11 +5,11 @@ inputs:
     description: 'Python script that runs the agent (must use @trace)'
     required: true
   baseline:
-    description: 'Path to baseline JSON file'
+    description: 'Path to baseline JSON file. If omitted, only the policy is enforced.'
     required: false
     default: ''
   policy:
-    description: 'Path to policy YAML file'
+    description: 'Path to policy YAML file. The policy is only applied if the file exists.'
     required: false
     default: '.agentdbg/policy.yaml'
   agentdbg-version:
@@ -37,6 +37,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Check if baseline and policy are provided
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.baseline }}" ] && [ -z "${{ inputs.policy }}" ]; then
+          echo "Either baseline, policy, or both must be provided."
+          exit 1
+        fi
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -72,6 +80,12 @@ runs:
       run: |
         RUN_ID=$(agentdbg list --json | python -c "import sys,json; data=json.load(sys.stdin); print(data['runs'][0]['run_id'] if data.get('runs') else '')")
         echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+    - name: Create baseline if not provided
+      shell: bash
+      if: ${{ inputs.baseline == '' }}
+      run: |
+        agentdbg baseline ${{ steps.get-run.outputs.run_id }} --out ${{ inputs.baseline }}
 
     - name: Run assertions
       shell: bash
