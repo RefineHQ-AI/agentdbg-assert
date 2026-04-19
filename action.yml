@@ -81,12 +81,6 @@ runs:
         RUN_ID=$(agentdbg list --json | python -c "import sys,json; data=json.load(sys.stdin); print(data['runs'][0]['run_id'] if data.get('runs') else '')")
         echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
-    - name: Create baseline if not provided
-      shell: bash
-      if: ${{ inputs.baseline == '' }}
-      run: |
-        agentdbg baseline ${{ steps.get-run.outputs.run_id }} --out ${{ inputs.baseline }}
-
     - name: Run assertions
       shell: bash
       id: assert
@@ -105,7 +99,7 @@ runs:
 
     - name: Post PR comment
       if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' }}
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@v3.0.4
       with:
         path: agentdbg-report.md
 
