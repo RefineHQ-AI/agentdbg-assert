@@ -7,6 +7,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import urllib.error
 from pathlib import Path
 
@@ -82,6 +83,11 @@ if os.environ.get("FAKE_MAIDA_NO_CHANGE") != "1":
     )
 """
     )
+    if os.name == "nt":
+        script = executable.with_suffix(".py")
+        executable.replace(script)
+        executable = bin_dir / "maida.cmd"
+        executable.write_text(f'@"{sys.executable}" "{script}" %*\n')
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
 
