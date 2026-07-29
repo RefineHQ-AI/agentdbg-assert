@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -152,7 +153,10 @@ def _accept_baseline(
     run_id: str,
     environ: Mapping[str, str],
 ) -> None:
-    command = ["maida", "accept"]
+    maida_executable = shutil.which("maida", path=environ.get("PATH"))
+    if maida_executable is None:
+        raise WriteBackError("The maida command was not found on PATH.")
+    command = [maida_executable, "accept"]
     if run_id.strip():
         command.append(run_id.strip())
     command.extend(["--baseline", baseline, "--reason", reason.strip()])
