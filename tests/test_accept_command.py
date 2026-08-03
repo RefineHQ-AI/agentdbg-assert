@@ -377,6 +377,7 @@ def test_accept_command_action_checks_authorization_before_checkout():
     inputs = action["inputs"]
     for name in (
         "agent-script",
+        "trace-command",
         "baseline",
         "policy",
         "maida-version",
@@ -391,13 +392,21 @@ def test_accept_command_action_checks_authorization_before_checkout():
     checkout_index = next(
         i for i, step in enumerate(steps) if step.get("name") == "Check out verified PR head"
     )
-    run_index = next(i for i, step in enumerate(steps) if step.get("name") == "Run agent")
+    run_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Produce completed run"
+    )
     write_index = next(i for i, step in enumerate(steps) if step.get("id") == "write-back")
     finalize_index = next(i for i, step in enumerate(steps) if step.get("name") == "Report command result")
 
     assert prepare_index < checkout_index < run_index < write_index < finalize_index
     assert steps[checkout_index]["if"] == "steps.prepare.outputs.authorized == 'true'"
     assert steps[run_index]["if"] == "steps.prepare.outputs.authorized == 'true'"
+    assert "Pass exactly one of agent-script or trace-command" in steps[run_index]["run"]
+    assert 'python "$AGENT_SCRIPT"' in steps[run_index]["run"]
+    assert 'bash -o pipefail -c "$TRACE_COMMAND"' in steps[run_index]["run"]
+    assert "MAIDA_DATA_DIR" in steps[run_index]["run"]
+    assert "exactly one completed Maida run" in steps[run_index]["run"]
+    assert '["maida", "list", "--json"]' in steps[run_index]["run"]
     assert "always()" in steps[finalize_index]["if"]
     assert steps[finalize_index]["env"]["WRITE_BACK_OUTCOME"] == "${{ steps.write-back.outcome }}"
     assert action["outputs"]["commit-sha"]["value"] == "${{ steps.write-back.outputs.commit-sha }}"

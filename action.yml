@@ -2,8 +2,13 @@ name: 'Maida Assert'
 description: 'Run Maida behavioral regression checks on agent traces'
 inputs:
   agent-script:
-    description: 'Python script that runs the agent (must use @trace)'
-    required: true
+    description: 'Python script that runs the agent (must use @trace). Pass exactly one trace source.'
+    required: false
+    default: ''
+  trace-command:
+    description: 'Trusted shell command that creates exactly one completed Maida run. Pass exactly one trace source.'
+    required: false
+    default: ''
   baseline:
     description: 'Path to baseline JSON file. If omitted, only the policy is enforced.'
     required: false
@@ -43,12 +48,19 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Check if baseline and policy are provided
+    - name: Validate trace source, baseline, and policy
       env:
+        AGENT_SCRIPT: ${{ inputs.agent-script }}
+        TRACE_COMMAND: ${{ inputs.trace-command }}
         BASELINE: ${{ inputs.baseline }}
         POLICY: ${{ inputs.policy }}
       shell: bash
       run: |
+        if { [ -z "$AGENT_SCRIPT" ] && [ -z "$TRACE_COMMAND" ]; } || \
+           { [ -n "$AGENT_SCRIPT" ] && [ -n "$TRACE_COMMAND" ]; }; then
+          echo "Pass exactly one of agent-script or trace-command."
+          exit 2
+        fi
         # At least one of baseline or policy must be provided
         if [ -z "$BASELINE" ] && [ -z "$POLICY" ]; then
           echo "Either baseline, policy, or both must be provided."
@@ -94,6 +106,7 @@ runs:
       id: gate
       env:
         AGENT_SCRIPT: ${{ inputs.agent-script }}
+        TRACE_COMMAND: ${{ inputs.trace-command }}
         BASELINE: ${{ inputs.baseline }}
         POLICY: ${{ inputs.policy }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
@@ -107,16 +120,37 @@ runs:
         fi
         if [ -n "$EXTRA_ARGS" ]; then
           read -r -a EXTRA_ARGV <<< "$EXTRA_ARGS"
+          if [ -n "$TRACE_COMMAND" ]; then
+            for arg in "${EXTRA_ARGV[@]}"; do
+              if [ "$arg" = "--trials" ] || [[ "$arg" == --trials=* ]]; then
+                echo "trace-command mode fixes --trials at 1; remove --trials from extra-args."
+                exit 2
+              fi
+            done
+          fi
           ARGS+=("${EXTRA_ARGV[@]}")
         fi
+        RUN_TARGET="$AGENT_SCRIPT"
+        if [ -n "$TRACE_COMMAND" ]; then
+          export MAIDA_TRACE_COMMAND="$TRACE_COMMAND"
+          export MAIDA_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/maida-trace-command.XXXXXX")"
+          RUN_TARGET="$(mktemp "$GITHUB_WORKSPACE/maida_trace_command_runner.XXXXXX")"
+          trap 'rm -f -- "$RUN_TARGET"' EXIT
+          cp "$GITHUB_ACTION_PATH/scripts/run_trace_command.py" "$RUN_TARGET"
+          if git check-ignore --quiet "$RUN_TARGET"; then
+            echo "The temporary trace-command runner is ignored by Git; choose repository ignore rules that allow the generated runner."
+            exit 10
+          fi
+          ARGS+=(--trials 1)
+        fi
         set +e
-        maida run "$AGENT_SCRIPT" "${ARGS[@]}" \
+        maida run "$RUN_TARGET" "${ARGS[@]}" \
           --format markdown --json-out maida-report.json > maida-report.md
         status=$?
         set -e
         if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
           echo "maida run exited with code $status and did not produce a statistical gate report."
-          echo "Ensure agent-script records exactly one completed trace per trial with @trace or traced_run()."
+          echo "Ensure the selected trace source records exactly one completed Maida run per trial."
           exit "$status"
         fi
 
@@ -137,6 +171,7 @@ runs:
       shell: bash
       env:
         AGENT_SCRIPT: ${{ inputs.agent-script }}
+        TRACE_COMMAND: ${{ inputs.trace-command }}
         BASELINE: ${{ inputs.baseline }}
         POLICY: ${{ inputs.policy }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
@@ -168,7 +203,12 @@ runs:
           else
             printf "# Install Maida using the workflow version: %q\n" "$MAIDA_VERSION"
           fi
-          printf "maida run %q" "$AGENT_SCRIPT"
+          if [ -n "$AGENT_SCRIPT" ]; then
+            printf "maida run %q" "$AGENT_SCRIPT"
+          else
+            echo "# Run the trace-command configured in the workflow with equivalent environment variables."
+            printf "maida assert"
+          fi
           if [ -n "$BASELINE" ]; then
             printf " --baseline %q" "$BASELINE"
           fi
