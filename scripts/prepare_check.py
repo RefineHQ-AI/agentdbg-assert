@@ -10,6 +10,7 @@ from typing import Any, Sequence
 
 
 CHECK_NAME = "Maida statistical gate"
+SUPPORTED_REPORT_VERSIONS = {"1", "2.0.0"}
 VERDICT_CONCLUSIONS = {
     "pass": "success",
     "fail": "failure",
@@ -23,7 +24,7 @@ VERDICT_PASSED = {
 
 
 class ReportError(ValueError):
-    """Raised when the Maida sidecar does not satisfy report version 1."""
+    """Raised when the Maida sidecar does not satisfy a supported report schema."""
 
 
 def _finite_number(value: Any, field: str) -> float:
@@ -39,13 +40,34 @@ def _escape_cell(value: str) -> str:
     return value.replace("\\", "\\\\").replace("`", "\\`").replace("|", "\\|")
 
 
-def _summary(report: dict[str, Any], details_url: str) -> str:
+def _non_negative_integer(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ReportError(f"{field} must be a non-negative integer")
+    return value
+
+
+def _summary_footer(
+    lines: list[str], report: dict[str, Any], details_url: str
+) -> str:
+    lines.extend(["", f"[Open this workflow run]({details_url}) for full gate output."])
+    if report["verdict"] == "inconclusive":
+        lines.extend(
+            [
+                "",
+                "This conclusion is neutral and does not block by itself. "
+                f"[Re-run this workflow]({details_url}) to collect a fresh trial set.",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _summary_v1(report: dict[str, Any], details_url: str) -> str:
     metadata = report.get("metadata")
     if not isinstance(metadata, dict):
         raise ReportError("metadata must be an object")
-    trials = metadata.get("trials_completed")
-    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 0:
-        raise ReportError("metadata.trials_completed must be a non-negative integer")
+    trials = _non_negative_integer(
+        metadata.get("trials_completed"), "metadata.trials_completed"
+    )
 
     results = report.get("aggregate_results")
     if not isinstance(results, list) or not results:
@@ -90,24 +112,168 @@ def _summary(report: dict[str, Any], details_url: str) -> str:
             f"{lower:.3f}–{upper:.3f} | {threshold:.3f} |"
         )
 
-    lines.extend(["", f"[Open this workflow run]({details_url}) for full gate output."])
-    if report["verdict"] == "inconclusive":
-        lines.extend(
-            [
-                "",
-                "This conclusion is neutral and does not block by itself. "
-                f"[Re-run this workflow]({details_url}) to collect a fresh trial set.",
-            ]
+    return _summary_footer(lines, report, details_url)
+
+
+def _v2_evidence(result: dict[str, Any], field: str) -> str:
+    kind = result.get("kind")
+    if kind not in {"invariant", "measured", "statistical", "distributional"}:
+        raise ReportError(
+            f"{field}.kind must be invariant, measured, statistical, or distributional"
         )
-    return "\n".join(lines)
+
+    mode = result.get("mode")
+    if mode not in {"gating", "report_only"}:
+        raise ReportError(f"{field}.mode must be gating or report_only")
+    verdict = result.get("verdict")
+    if mode == "gating" and verdict not in VERDICT_CONCLUSIONS:
+        raise ReportError(
+            f"{field}.verdict must be pass, fail, or inconclusive for a gating metric"
+        )
+    if mode == "report_only" and verdict is not None:
+        raise ReportError(f"{field}.verdict must be null for a report-only metric")
+
+    trials_used = _non_negative_integer(
+        result.get("trials_used"), f"{field}.trials_used"
+    )
+    trials_budgeted = _non_negative_integer(
+        result.get("trials_budgeted"), f"{field}.trials_budgeted"
+    )
+    if trials_used > trials_budgeted:
+        raise ReportError(f"{field}.trials_used must not exceed trials_budgeted")
+
+    evidence = result.get("evidence")
+    if not isinstance(evidence, dict):
+        raise ReportError(f"{field}.evidence must be an object")
+
+    if kind == "invariant":
+        violations = _non_negative_integer(
+            evidence.get("violations"), f"{field}.evidence.violations"
+        )
+        if violations > trials_used:
+            raise ReportError(
+                f"{field}.evidence.violations must not exceed trials_used"
+            )
+        return f"violated in {violations}/{trials_used} trials"
+
+    if kind == "measured":
+        delta = evidence.get("delta")
+        delta_text = (
+            "n/a"
+            if delta is None
+            else f"{_finite_number(delta, f'{field}.evidence.delta'):+.3g}"
+        )
+        sample = evidence.get("sample")
+        if not isinstance(sample, dict):
+            raise ReportError(f"{field}.evidence.sample must be an object")
+        minimum = _finite_number(sample.get("min"), f"{field}.evidence.sample.min")
+        median = _finite_number(
+            sample.get("median"), f"{field}.evidence.sample.median"
+        )
+        maximum = _finite_number(sample.get("max"), f"{field}.evidence.sample.max")
+        if not minimum <= median <= maximum:
+            raise ReportError(
+                f"{field}.evidence.sample must satisfy min <= median <= max"
+            )
+        return (
+            f"delta {delta_text}; min/median/max "
+            f"{minimum}/{median}/{maximum}"
+        )
+
+    bounds = evidence.get("confidence_bounds")
+    if isinstance(bounds, dict):
+        lower = _finite_number(
+            bounds.get("lower"), f"{field}.evidence.confidence_bounds.lower"
+        )
+        upper = _finite_number(
+            bounds.get("upper"), f"{field}.evidence.confidence_bounds.upper"
+        )
+        if not 0 <= lower <= upper <= 1:
+            raise ReportError(
+                f"{field}.evidence.confidence_bounds must satisfy "
+                "0 <= lower <= upper <= 1"
+            )
+        if mode == "report_only":
+            observed = _finite_number(
+                evidence.get("observed_rate"), f"{field}.evidence.observed_rate"
+            )
+            if not 0 <= observed <= 1:
+                raise ReportError(
+                    f"{field}.evidence.observed_rate must be between 0 and 1"
+                )
+            return f"observed rate {observed:.3f}; no confidence verdict"
+        return f"one-sided bounds {lower:.3f}–{upper:.3f}"
+
+    if kind == "distributional":
+        observed = _finite_number(
+            evidence.get("observed"), f"{field}.evidence.observed"
+        )
+        bound = _finite_number(
+            evidence.get("prediction_bound"), f"{field}.evidence.prediction_bound"
+        )
+        return f"observed {observed:.3g}; prediction bound {bound:.3g}"
+
+    raise ReportError(f"{field}.evidence.confidence_bounds must be an object")
+
+
+def _summary_v2(report: dict[str, Any], details_url: str) -> str:
+    metadata = report.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ReportError("metadata must be an object")
+    trials_used = _non_negative_integer(
+        metadata.get("trials_used"), "metadata.trials_used"
+    )
+    trials_budgeted = _non_negative_integer(
+        metadata.get("trials_budgeted"), "metadata.trials_budgeted"
+    )
+    if trials_used > trials_budgeted:
+        raise ReportError("metadata.trials_used must not exceed trials_budgeted")
+
+    results = report.get("aggregate_results")
+    if not isinstance(results, list) or not results:
+        raise ReportError("aggregate_results must be a non-empty list")
+
+    lines = [
+        f"Overall verdict: **{report['verdict'].upper()}** across "
+        f"{trials_used}/{trials_budgeted} trials used.",
+        "",
+        "| Metric | Kind | Mode | Direction | Verdict | Evidence |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for index, result in enumerate(results):
+        field = f"aggregate_results[{index}]"
+        if not isinstance(result, dict):
+            raise ReportError(f"{field} must be an object")
+        name = result.get("check_name")
+        if not isinstance(name, str) or not name:
+            raise ReportError(f"{field}.check_name must be a non-empty string")
+
+        detail = _v2_evidence(result, field)
+        verdict = result.get("verdict")
+        verdict_text = verdict.upper() if verdict is not None else "REPORT ONLY"
+        direction = result.get("direction")
+        if direction not in {None, "lower", "upper", "both"}:
+            raise ReportError(f"{field}.direction must be lower, upper, both, or null")
+        lines.append(
+            f"| `{_escape_cell(name)}` | {result['kind']} | {result['mode']} | "
+            f"{direction or 'n/a'} | **{verdict_text}** | {detail} |"
+        )
+
+    return _summary_footer(lines, report, details_url)
+
+
+def _summary(report: dict[str, Any], details_url: str) -> str:
+    if report["report_version"] == "1":
+        return _summary_v1(report, details_url)
+    return _summary_v2(report, details_url)
 
 
 def build_check_payload(
     report: dict[str, Any], *, head_sha: str, details_url: str
 ) -> dict[str, Any]:
     """Validate *report* and return a completed Checks API request body."""
-    if report.get("report_version") != "1":
-        raise ReportError("report_version must be '1'")
+    if report.get("report_version") not in SUPPORTED_REPORT_VERSIONS:
+        raise ReportError("report_version must be '1' or '2.0.0'")
 
     verdict = report.get("verdict")
     if verdict not in VERDICT_CONCLUSIONS:
