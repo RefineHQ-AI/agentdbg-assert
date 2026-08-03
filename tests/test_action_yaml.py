@@ -39,10 +39,18 @@ def test_composite_action_type():
     assert action["runs"]["using"] == "composite"
 
 
-def test_required_inputs_present():
+def test_trace_sources_are_optional_inputs_with_runtime_exclusivity():
     inputs = _load_action()["inputs"]
     assert "agent-script" in inputs
-    assert inputs["agent-script"]["required"] is True
+    assert inputs["agent-script"]["required"] is False
+    assert inputs["agent-script"]["default"] == ""
+    assert inputs["trace-command"]["required"] is False
+    assert inputs["trace-command"]["default"] == ""
+
+    validation = _load_action()["runs"]["steps"][0]
+    assert validation["env"]["AGENT_SCRIPT"] == "${{ inputs.agent-script }}"
+    assert validation["env"]["TRACE_COMMAND"] == "${{ inputs.trace-command }}"
+    assert "Pass exactly one of agent-script or trace-command" in validation["run"]
 
 
 def test_optional_inputs_have_defaults():
@@ -75,11 +83,17 @@ def test_no_run_id_extraction_step():
         assert step.get("name") != "Get latest run ID"
 
 
-def test_gate_step_uses_run_command_and_json_sidecar():
+def test_gate_step_uses_selected_source_and_json_sidecar():
     steps = _load_action()["runs"]["steps"]
     gate_step = next(step for step in steps if step.get("id") == "gate")
     script = gate_step["run"]
-    assert 'maida run "$AGENT_SCRIPT" "${ARGS[@]}"' in script
+    assert 'RUN_TARGET="$AGENT_SCRIPT"' in script
+    assert 'RUN_TARGET="$(mktemp "$GITHUB_WORKSPACE/maida_trace_command_runner.XXXXXX")"' in script
+    assert 'cp "$GITHUB_ACTION_PATH/scripts/run_trace_command.py" "$RUN_TARGET"' in script
+    assert 'git check-ignore --quiet "$RUN_TARGET"' in script
+    assert 'maida run "$RUN_TARGET" "${ARGS[@]}"' in script
+    assert 'ARGS+=(--trials 1)' in script
+    assert "trace-command mode fixes --trials at 1" in script
     assert "--format markdown --json-out maida-report.json" in script
     assert "> maida-report.md" in script
     assert "steps.get-run" not in script
@@ -202,6 +216,10 @@ def test_report_adds_local_reproduction_hint_before_posting():
     assert "git+https://github.com/maida-ai/maida.git${MAIDA_VERSION}" in script
     assert "maida-ai==${MAIDA_VERSION:1}" in script
     assert 'printf "maida run %q" "$AGENT_SCRIPT"' in script
+    assert "Run the trace-command configured in the workflow" in script
+    assert 'printf "maida assert"' in script
+    assert 'printf "%s" "$TRACE_COMMAND"' not in script
+    assert 'echo "$TRACE_COMMAND"' not in script
     assert 'printf " --baseline %q" "$BASELINE"' in script
     assert 'printf " --policy %q" "$POLICY"' in script
     assert 'printf " %s" "$EXTRA_ARGS"' in script
@@ -256,7 +274,9 @@ def test_readme_uses_maida_ai_package_for_local_install():
 
 def test_readme_workflows_use_current_action_version():
     readme = README_PATH.read_text()
-    assert "maida-ai/maida-assert@V4" in readme
+    assert "maida-ai/maida-assert@main" in readme
+    assert "maida-ai/maida-assert@V4" not in readme
+    assert "maida-ai/maida-assert@V5" not in readme
     assert "maida-ai/maida-assert@v1" not in readme
     assert "maida-ai/maida-assert@v2" not in readme
     assert "maida-ai/maida-assert@V3" not in readme
@@ -376,3 +396,14 @@ def test_readme_documents_authorized_accept_command_workflow():
     assert "/maida accept [optional reason]" in readme
     assert "write access" in readme
     assert "Fork pull requests" in readme
+
+
+def test_readme_documents_langfuse_trace_command_without_inline_secrets():
+    readme = README_PATH.read_text()
+    assert "trace-command:" in readme
+    assert "maida import langfuse --trace-id \"$LANGFUSE_TRACE_ID\"" in readme
+    assert "LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}" in readme
+    assert "LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}" in readme
+    assert "exactly one completed Maida run" in readme
+    assert "fixed one-trial gate" in readme
+    assert "Do not build `trace-command` from pull-request-controlled text" in readme

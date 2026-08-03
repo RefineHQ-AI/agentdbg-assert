@@ -48,6 +48,69 @@ def _report(verdict="pass", *, passed=True):
     }
 
 
+def _report_v2(verdict="pass", *, passed=True):
+    return {
+        "report_version": "2.0.0",
+        "verdict": verdict,
+        "passed": passed,
+        "trials_requested": 3,
+        "metadata": {
+            "trials_used": 3,
+            "trials_budgeted": 3,
+            "stopping_rule": "fixed_n",
+            "abort_reason": None,
+        },
+        "trials": [],
+        "aggregate_results": [
+            {
+                "check_name": "no_loops",
+                "kind": "invariant",
+                "direction": None,
+                "mode": "gating",
+                "verdict": verdict,
+                "decision_rule": "invariant",
+                "stopping_rule": "fixed_n",
+                "trials_used": 3,
+                "trials_budgeted": 3,
+                "trial_outcomes": [True, True, verdict == "pass"],
+                "evidence": {"violations": 0 if verdict == "pass" else 1},
+            },
+            {
+                "check_name": "step_count",
+                "kind": "measured",
+                "direction": "upper",
+                "mode": "gating",
+                "verdict": verdict,
+                "decision_rule": "tolerance",
+                "stopping_rule": "fixed_n",
+                "trials_used": 3,
+                "trials_budgeted": 3,
+                "trial_outcomes": [],
+                "evidence": {
+                    "delta": 1.0,
+                    "sample": {"min": 10.0, "median": 11.0, "max": 12.0},
+                },
+            },
+            {
+                "check_name": "task_pass_rate",
+                "kind": "statistical",
+                "direction": "lower",
+                "mode": "report_only",
+                "verdict": None,
+                "decision_rule": "report_only",
+                "stopping_rule": "fixed_n",
+                "trials_used": 3,
+                "trials_budgeted": 3,
+                "trial_outcomes": [True, True, False],
+                "evidence": {
+                    "observed_rate": 2 / 3,
+                    "confidence_bounds": {"lower": 0.253534, "upper": 0.921734},
+                },
+            },
+        ],
+    }
+
+
 @pytest.mark.parametrize(
     ("verdict", "passed", "conclusion"),
     [
@@ -89,6 +152,45 @@ def test_summary_lists_assertion_verdict_interval_threshold_and_rerun_link():
 
 
 @pytest.mark.parametrize(
+    ("verdict", "passed", "conclusion"),
+    [
+        ("pass", True, "success"),
+        ("fail", False, "failure"),
+        ("inconclusive", None, "neutral"),
+    ],
+)
+def test_build_check_payload_maps_v2_verdicts(verdict, passed, conclusion):
+    payload = build_check_payload(
+        _report_v2(verdict, passed=passed),
+        head_sha="f" * 40,
+        details_url="https://github.com/maida-ai/example/actions/runs/202",
+    )
+
+    assert payload["conclusion"] == conclusion
+    assert payload["output"]["title"] == (
+        f"Maida statistical gate: {verdict.upper()}"
+    )
+
+
+def test_v2_summary_lists_tier_evidence_and_report_only_metrics():
+    payload = build_check_payload(
+        _report_v2(),
+        head_sha="1" * 40,
+        details_url="https://github.com/maida-ai/example/actions/runs/303",
+    )
+
+    summary = payload["output"]["summary"]
+    assert "3/3 trials used" in summary
+    assert "`no_loops`" in summary
+    assert "violated in 0/3 trials" in summary
+    assert "`step_count`" in summary
+    assert "delta +1; min/median/max 10.0/11.0/12.0" in summary
+    assert "`task_pass_rate`" in summary
+    assert "REPORT ONLY" in summary
+    assert "observed rate 0.667; no confidence verdict" in summary
+
+
+@pytest.mark.parametrize(
     ("change", "message"),
     [
         ({"report_version": "2"}, "report_version"),
@@ -118,6 +220,18 @@ def test_invalid_confidence_interval_is_rejected():
             report,
             head_sha="d" * 40,
             details_url="https://github.com/maida-ai/example/actions/runs/789",
+        )
+
+
+def test_v2_gating_metric_requires_a_verdict():
+    report = _report_v2()
+    report["aggregate_results"][0]["verdict"] = None
+
+    with pytest.raises(ReportError, match="verdict"):
+        build_check_payload(
+            report,
+            head_sha="2" * 40,
+            details_url="https://github.com/maida-ai/example/actions/runs/404",
         )
 
 

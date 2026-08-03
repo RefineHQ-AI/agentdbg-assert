@@ -36,20 +36,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@V4
+      - uses: maida-ai/maida-assert@main
         with:
           agent-script: my_agent.py
           baseline: baselines/my_agent.json
 ```
 
-Your `agent-script` must instrument the agent with `@trace` or
-`traced_run()` so that Maida can capture the run.
+Pass exactly one trace source. An `agent-script` must instrument the agent with
+`@trace` or `traced_run()`. A `trace-command` may import an external trace, but
+it must create exactly one completed Maida run.
 
 ### Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `agent-script` | yes | — | Path to the Python script that runs the agent. The script must use `@trace` or `traced_run()` so a run is recorded. |
+| `agent-script` | one trace source | `''` | Path to the Python script that runs the agent. The script must use `@trace` or `traced_run()` so a run is recorded. |
+| `trace-command` | one trace source | `''` | Trusted shell command that creates exactly one completed Maida run, such as an importer invocation. Do not include secrets in the command. |
 | `baseline` | no | `''` | Path to a baseline JSON file produced by `maida baseline`. If omitted, only the policy is enforced. |
 | `policy` | no | `.maida/policy.yaml` | Path to a policy YAML file. |
 | `maida-version` | no | `@main` | Version of Maida to install. The action requires the statistical `maida run` command, so use `@main` until a release containing it is available. Afterward, use `v<version>` for PyPI or `@<ref>` for the [`maida`](https://github.com/maida-ai/maida) repository. |
@@ -88,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@V4
+      - uses: maida-ai/maida-assert@main
         with:
           agent-script: my_agent.py
 ```
@@ -113,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@V4
+      - uses: maida-ai/maida-assert@main
         with:
           agent-script: examples/my_agent.py
           baseline: baselines/my_agent.json
@@ -122,6 +124,46 @@ jobs:
           python-version: '3.11'
           extra-args: --trials 5 --max-steps 20
 ```
+
+### Gate a Langfuse trace
+
+Use `trace-command` when the run comes from an importer instead of a traced
+Python entrypoint. This example keeps credentials in GitHub secrets and the
+trace ID in a repository variable:
+
+```yaml
+name: Imported Trace Regression Check
+on: [pull_request]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  imported-trace-check:
+    runs-on: ubuntu-latest
+    env:
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_TRACE_ID: ${{ vars.LANGFUSE_TRACE_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maida-ai/maida-assert@main
+        with:
+          trace-command: maida import langfuse --trace-id "$LANGFUSE_TRACE_ID"
+          baseline: baselines/imported-agent.json
+          policy: .maida/policy.yaml
+```
+
+The command must create exactly one completed Maida run. Imported traces use a
+fixed one-trial gate: do not add `--trials` to `extra-args`. Import a single
+trace ID rather than a range or query that can create multiple runs. Policies
+that require several statistical trials should continue to use `agent-script`.
+
+`trace-command` is trusted workflow code. Do not build `trace-command` from pull-request-controlled text.
+Pass credentials through `env` and GitHub secrets; the Action does not print
+the command in its reproduction hint.
 
 ### Run on `main` without posting a PR comment
 
@@ -145,7 +187,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@V4
+      - uses: maida-ai/maida-assert@main
         with:
           agent-script: my_agent.py
           baseline: baselines/my_agent.json
@@ -245,8 +287,9 @@ jobs:
 ```
 
 Enable the visible command hint in the normal gate step with
-`accept-command-enabled: 'true'`. The handler reruns the traced agent and
-assertion inputs, delegates the baseline-only commit to the write-back engine,
+`accept-command-enabled: 'true'`. The handler reruns exactly one configured
+trace source (`agent-script` or `trace-command`) and the assertion inputs,
+delegates the baseline-only commit to the write-back engine,
 and posts either a commit link, an already-current confirmation, or an
 actionable workflow failure. The write-back dispatch still requires the normal
 gate workflow to listen for `maida_baseline_updated` as described below.

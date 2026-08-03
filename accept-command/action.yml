@@ -4,7 +4,12 @@ description: 'Authorize /maida accept and write an intentional baseline change t
 inputs:
   agent-script:
     description: 'Python script that runs the traced agent'
-    required: true
+    required: false
+    default: ''
+  trace-command:
+    description: 'Trusted shell command that creates exactly one completed Maida run'
+    required: false
+    default: ''
   baseline:
     description: 'Tracked baseline JSON file to accept'
     required: true
@@ -82,12 +87,47 @@ runs:
           exit 10
         fi
 
-    - name: Run agent
+    - name: Produce completed run
       if: steps.prepare.outputs.authorized == 'true'
       shell: bash
       env:
         AGENT_SCRIPT: '${{ inputs.agent-script }}'
-      run: python "$AGENT_SCRIPT"
+        TRACE_COMMAND: '${{ inputs.trace-command }}'
+      run: |
+        if { [ -z "$AGENT_SCRIPT" ] && [ -z "$TRACE_COMMAND" ]; } || \
+           { [ -n "$AGENT_SCRIPT" ] && [ -n "$TRACE_COMMAND" ]; }; then
+          echo "Pass exactly one of agent-script or trace-command."
+          exit 2
+        fi
+        export MAIDA_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/maida-accept-command.XXXXXX")"
+        echo "MAIDA_DATA_DIR=$MAIDA_DATA_DIR" >> "$GITHUB_ENV"
+        if [ -n "$AGENT_SCRIPT" ]; then
+          python "$AGENT_SCRIPT"
+        else
+          bash -o pipefail -c "$TRACE_COMMAND"
+        fi
+        python - <<'PY'
+        import json
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            ["maida", "list", "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            runs = json.loads(result.stdout)["runs"] if result.returncode == 0 else []
+        except (KeyError, TypeError, json.JSONDecodeError):
+            runs = []
+        if len(runs) != 1 or runs[0].get("status") == "running":
+            print(
+                "The selected trace source must create exactly one completed Maida run.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        PY
 
     - name: Verify completed run
       if: steps.prepare.outputs.authorized == 'true'
