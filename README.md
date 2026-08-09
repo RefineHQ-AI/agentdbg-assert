@@ -10,6 +10,8 @@ The report leads with a pass/fail/inconclusive verdict, shows top behavior chang
 (steps, tool path, loops/cycles, guardrails, terminal state, latency/cost,
 and models), groups failed checks by stable reason code, and includes concise
 next steps so reviewers see *why* the gate failed without leaving the PR.
+Workflow reruns update the existing Maida marker comment in place, keeping one
+current gate report on the PR instead of hiding or appending older comments.
 For baseline failures, the local reproduction hint also shows the explicit
 `maida accept --reason ...` path to use only after the change is inspected and
 intentional.

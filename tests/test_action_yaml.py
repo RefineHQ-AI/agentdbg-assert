@@ -164,6 +164,24 @@ def test_action_report_uses_cli_generated_markdown_file():
     assert post_step["with"]["path"] == "maida-report.md"
 
 
+def test_sticky_comment_updates_existing_marker_in_place():
+    post_step = next(
+        step
+        for step in _load_action()["runs"]["steps"]
+        if step.get("name") == "Post PR comment if possible"
+    )
+    forbidden_modes = {
+        "append",
+        "hide",
+        "hide_and_recreate",
+        "hide_classify",
+        "only_create",
+        "recreate",
+    }
+
+    assert forbidden_modes.isdisjoint(post_step["with"])
+
+
 def test_action_prepares_and_publishes_stable_check_payload():
     steps = _load_action()["runs"]["steps"]
     prepare_step = next(step for step in steps if step.get("id") == "check")
@@ -288,6 +306,7 @@ def test_readme_describes_current_pr_comment_contract():
     assert "top behavior changes" in readme
     assert "stable reason code" in readme
     assert "concise\nnext steps" in readme
+    assert "reruns update the existing Maida marker comment in place" in readme
     assert "`maida accept --reason ...` path" in readme
 
 
