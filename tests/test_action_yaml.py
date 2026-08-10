@@ -1,5 +1,6 @@
 """Structural tests for action.yml and public repo text."""
 
+import json
 from pathlib import Path
 
 import yaml
@@ -9,6 +10,7 @@ ACTION_PATH = REPO_ROOT / "action.yml"
 WRITE_BACK_ACTION_PATH = REPO_ROOT / "write-back" / "action.yml"
 README_PATH = REPO_ROOT / "README.md"
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+CONTRACT_PATH = REPO_ROOT / "tests" / "contracts" / "current-main.json"
 
 
 def _load_action():
@@ -32,6 +34,36 @@ def _readme_yaml_blocks():
         if in_yaml:
             current.append(line)
     return blocks
+
+
+def test_action_and_readme_match_python_owned_current_main_contract():
+    contract = json.loads(CONTRACT_PATH.read_text())
+    action = _load_action()
+    readme = README_PATH.read_text()
+    gate_step = next(
+        step for step in action["runs"]["steps"] if step.get("id") == "gate"
+    )
+
+    assert action["inputs"]["maida-version"]["default"] == "@main"
+    assert f'maida {contract["cli"]["primary_gate"]} "$RUN_TARGET"' in gate_step["run"]
+    assert contract["action_ref"] in readme
+    assert contract["install_requirement"] in readme
+    assert f'version: {contract["schemas"]["policy"]}' in readme
+    policy_section = readme.split("## Policy example", 1)[1].split(
+        "## Running the Maida statistical gate locally", 1
+    )[0]
+    assert "assert:" not in policy_section
+    assert "maida assert" not in policy_section
+
+
+def test_ci_runs_contract_tests_for_action_and_documentation_changes():
+    workflow = CI_WORKFLOW_PATH.read_text()
+
+    assert "- README.md" in workflow
+    assert "- action.yml" in workflow
+    assert "- requirements-dev.txt" in workflow
+    assert "- tests/**" in workflow
+    assert "pytest -q" in workflow
 
 
 def test_composite_action_type():

@@ -1,4 +1,4 @@
-# Maida Assert Action
+# Maida Behavioral Regression Gate Action
 
 A GitHub Action that runs the [`maida`](https://github.com/maida-ai/maida)
 statistical gate against your AI agent on every PR. It executes your traced
@@ -198,18 +198,35 @@ jobs:
 
 ## Policy example
 
-The policy file controls what `maida assert` checks on every run.
+The policy file controls what `maida run` checks across isolated candidate
+trials. Policy v2 fails closed: unknown fields are errors.
 The full list of supported keys is documented in the
 [policy reference](https://github.com/maida-ai/maida/blob/main/docs/reference/policy.md).
 
 A minimal `.maida/policy.yaml` looks like this:
 
 ```yaml
-assert:
-  no_loops: true
-  no_guardrails: true
-  step_tolerance: 0.5
-  expect_status: ok
+version: 2
+trials: 3
+fail_fast: true
+metrics:
+  stop_condition_reached:
+    kind: invariant
+    require: true
+  forbidden_tools:
+    kind: invariant
+    none_of: [admin_delete]
+  step_count:
+    kind: measured
+    direction: upper
+    tolerance: {relative: 0.5}
+  task_pass_rate:
+    kind: statistical
+    direction: lower
+    threshold: 0.90
+    confidence: 0.95
+    success_predicate: all_invariants_passed
+    mode: report_only
 ```
 
 CLI flags passed via `extra-args` always override values from the
@@ -359,7 +376,7 @@ GitHub associates the dispatch workflow itself with the default-branch SHA, so
 the consuming command-handler workflow must publish the gate status or check
 against `client_payload.sha` for required PR checks to recognize the result.
 
-When `maida assert` reports failed checks, the action still publishes the
+When `maida run` reports failed checks, the action still publishes the
 Markdown report and then exits `1`. Missing runs or baselines and internal
 errors exit immediately with the underlying CLI/setup code. See the
 [`maida` reference](https://github.com/maida-ai/maida/blob/main/docs/cli.md)

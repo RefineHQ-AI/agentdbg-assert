@@ -6,9 +6,11 @@ on:
     paths: &test_paths
       - .maida/**
       - .github/workflows/**
+      - README.md
       - action.yml
       - accept-command/**
       - examples/**
+      - requirements-dev.txt
       - scripts/**
       - tests/**
       - write-back/**
