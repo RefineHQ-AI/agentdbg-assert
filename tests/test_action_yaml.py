@@ -44,7 +44,7 @@ def test_action_and_readme_match_python_owned_current_main_contract():
         step for step in action["runs"]["steps"] if step.get("id") == "gate"
     )
 
-    assert action["inputs"]["maida-version"]["default"] == "@main"
+    assert action["inputs"]["maida-version"]["default"] == "v0.5.0"
     assert f'maida {contract["cli"]["primary_gate"]} "$RUN_TARGET"' in gate_step["run"]
     assert contract["action_ref"] in readme
     assert contract["install_requirement"] in readme
@@ -309,22 +309,24 @@ def test_pypi_install_uses_maida_ai_package():
 
 
 def test_maida_version_description_documents_run_command_coupling():
-    description = _load_action()["inputs"]["maida-version"]["description"]
+    description = " ".join(
+        _load_action()["inputs"]["maida-version"]["description"].split()
+    )
     assert "statistical `maida run` command" in description
-    assert "Use '@main' until" in description
+    assert 'Default is "v0.5.0"' in description
 
 
 def test_readme_uses_maida_ai_package_for_local_install():
     readme = (REPO_ROOT / "README.md").read_text()
     assert (
-        'uv add "maida-ai @ git+https://github.com/maida-ai/maida.git@main"' in readme
+        'uv add "maida-ai>=0.5"' in readme
     )
     assert "uv add maida\n" not in readme
 
 
 def test_readme_workflows_use_current_action_version():
     readme = README_PATH.read_text()
-    assert "maida-ai/maida-assert@main" in readme
+    assert "maida-ai/maida-assert@v5" in readme
     assert "maida-ai/maida-assert@V4" not in readme
     assert "maida-ai/maida-assert@V5" not in readme
     assert "maida-ai/maida-assert@v1" not in readme
@@ -429,7 +431,7 @@ def test_public_files_use_current_branding():
 
 def test_readme_documents_write_back_security_and_dispatch_contract():
     readme = README_PATH.read_text()
-    assert "maida-ai/maida-assert/write-back@main" in readme
+    assert "maida-ai/maida-assert/write-back@v5" in readme
     assert "contents: write" in readme
     assert "same-repository pull requests only" in readme
     assert "maida_baseline_updated" in readme
@@ -441,7 +443,7 @@ def test_readme_documents_write_back_security_and_dispatch_contract():
 
 def test_readme_documents_authorized_accept_command_workflow():
     readme = README_PATH.read_text()
-    assert "maida-ai/maida-assert/accept-command@main" in readme
+    assert "maida-ai/maida-assert/accept-command@v5" in readme
     assert "issue_comment" in readme
     assert "accept-command-enabled: 'true'" in readme
     assert "/maida accept [optional reason]" in readme

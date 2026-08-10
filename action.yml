@@ -23,11 +23,10 @@ inputs:
       Could be a version number starting with 'v' or a branch name starting with '@'.
       If a github identifier starts with 'v', use '@' prefix.
       Otherwise PyPI will be used.
-      Default is "@main".
-      Note: this action relies on the statistical `maida run` command.
-      Use '@main' until that command is included in a Maida release.
+      Default is "v0.5.0", the first release containing the statistical
+      `maida run` command this action relies on.
     required: false
-    default: '@main'
+    default: 'v0.5.0'
   python-version:
     description: 'Python version to use'
     required: false
