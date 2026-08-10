@@ -17,6 +17,14 @@ build_check_payload = prepare_check.build_check_payload
 main = prepare_check.main
 
 
+def test_supported_report_versions_include_python_owned_current_report() -> None:
+    contract_path = Path(__file__).parent / "contracts" / "current-main.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+
+    assert contract["schemas"]["report"] in prepare_check.SUPPORTED_REPORT_VERSIONS
+    assert "1" in prepare_check.SUPPORTED_REPORT_VERSIONS
+
+
 def _report(verdict="pass", *, passed=True):
     return {
         "report_version": "1",
