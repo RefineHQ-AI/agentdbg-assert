@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@main
+      - uses: maida-ai/maida-assert@v5
         with:
           agent-script: my_agent.py
           baseline: baselines/my_agent.json
@@ -56,7 +56,7 @@ it must create exactly one completed Maida run.
 | `trace-command` | one trace source | `''` | Trusted shell command that creates exactly one completed Maida run, such as an importer invocation. Do not include secrets in the command. |
 | `baseline` | no | `''` | Path to a baseline JSON file produced by `maida baseline`. If omitted, only the policy is enforced. |
 | `policy` | no | `.maida/policy.yaml` | Path to a policy YAML file. |
-| `maida-version` | no | `@main` | Version of Maida to install. The action requires the statistical `maida run` command, so use `@main` until a release containing it is available. Afterward, use `v<version>` for PyPI or `@<ref>` for the [`maida`](https://github.com/maida-ai/maida) repository. |
+| `maida-version` | no | `v0.5.0` | Version of Maida to install. Use `v<version>` for PyPI or `@<ref>` to track a branch of the [`maida`](https://github.com/maida-ai/maida) repository. |
 | `python-version` | no | `3.12` | Python version passed to `actions/setup-python`. |
 | `extra-args` | no | `''` | Additional CLI arguments forwarded to `maida run` (for example, `--trials 5 --max-steps 20`). CLI flags override policy values. |
 | `post-comment` | no | `true` | When `true` and the workflow runs on a `pull_request` event, the Markdown report is posted as a sticky PR comment. |
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@main
+      - uses: maida-ai/maida-assert@v5
         with:
           agent-script: my_agent.py
 ```
@@ -117,12 +117,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@main
+      - uses: maida-ai/maida-assert@v5
         with:
           agent-script: examples/my_agent.py
           baseline: baselines/my_agent.json
           policy: .maida/policy.yaml
-          maida-version: '@main'
+          maida-version: 'v0.5.0'
           python-version: '3.11'
           extra-args: --trials 5 --max-steps 20
 ```
@@ -151,7 +151,7 @@ jobs:
       LANGFUSE_TRACE_ID: ${{ vars.LANGFUSE_TRACE_ID }}
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@main
+      - uses: maida-ai/maida-assert@v5
         with:
           trace-command: maida import langfuse --trace-id "$LANGFUSE_TRACE_ID"
           baseline: baselines/imported-agent.json
@@ -189,7 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: maida-ai/maida-assert@main
+      - uses: maida-ai/maida-assert@v5
         with:
           agent-script: my_agent.py
           baseline: baselines/my_agent.json
@@ -238,7 +238,7 @@ For a quick local check before pushing, install the `maida-ai` package and run t
 same command the action runs:
 
 ```bash
-uv add "maida-ai @ git+https://github.com/maida-ai/maida.git@main"
+uv add "maida-ai>=0.5"
 
 maida run my_agent.py \
   --baseline baselines/my_agent.json \
@@ -297,7 +297,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: maida-ai/maida-assert/accept-command@main
+      - uses: maida-ai/maida-assert/accept-command@v5
         with:
           agent-script: my_agent.py
           baseline: baselines/my_agent.json
@@ -336,7 +336,7 @@ steps:
 
   # Install Maida and run the traced agent before this step.
   - id: write-back
-    uses: maida-ai/maida-assert/write-back@main
+    uses: maida-ai/maida-assert/write-back@v5
     with:
       baseline: baselines/my_agent.json
       reason: ${{ steps.command.outputs.reason }}
