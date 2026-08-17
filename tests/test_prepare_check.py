@@ -17,12 +17,13 @@ build_check_payload = prepare_check.build_check_payload
 main = prepare_check.main
 
 
-def test_supported_report_versions_include_python_owned_current_report() -> None:
+def test_python_owned_current_report_uses_supported_major() -> None:
     contract_path = Path(__file__).parent / "contracts" / "current-main.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
 
-    assert contract["schemas"]["report"] in prepare_check.SUPPORTED_REPORT_VERSIONS
-    assert "1" in prepare_check.SUPPORTED_REPORT_VERSIONS
+    assert prepare_check._is_supported_report_version(
+        contract["schemas"]["report"]
+    )
 
 
 def _report(verdict="pass", *, passed=True):
@@ -56,9 +57,9 @@ def _report(verdict="pass", *, passed=True):
     }
 
 
-def _report_v2(verdict="pass", *, passed=True):
+def _report_v2(verdict="pass", *, passed=True, report_version="2.0.0"):
     return {
-        "report_version": "2.0.0",
+        "report_version": report_version,
         "verdict": verdict,
         "passed": passed,
         "trials_requested": 3,
@@ -178,6 +179,26 @@ def test_build_check_payload_maps_v2_verdicts(verdict, passed, conclusion):
     assert payload["output"]["title"] == (
         f"Maida statistical gate: {verdict.upper()}"
     )
+
+
+@pytest.mark.parametrize("report_version", ["2.0.0", "2.0.1", "2.1.0"])
+def test_build_check_payload_accepts_report_v2_patch_versions(report_version):
+    payload = build_check_payload(
+        _report_v2(report_version=report_version),
+        head_sha="a" * 40,
+        details_url="https://github.com/maida-ai/example/actions/runs/203",
+    )
+
+    assert payload["conclusion"] == "success"
+
+
+def test_build_check_payload_rejects_incompatible_report_major():
+    with pytest.raises(ReportError, match="major 2"):
+        build_check_payload(
+            _report_v2(report_version="3.0.0"),
+            head_sha="a" * 40,
+            details_url="https://github.com/maida-ai/example/actions/runs/204",
+        )
 
 
 def test_v2_summary_lists_tier_evidence_and_report_only_metrics():

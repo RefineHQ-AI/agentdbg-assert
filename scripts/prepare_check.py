@@ -5,12 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Sequence
 
 
 CHECK_NAME = "Maida statistical gate"
-SUPPORTED_REPORT_VERSIONS = {"1", "2.0.0"}
+LEGACY_REPORT_VERSION = "1"
+SUPPORTED_REPORT_MAJOR = 2
+SEMANTIC_VERSION = re.compile(
+    r"(?P<major>0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+)
 VERDICT_CONCLUSIONS = {
     "pass": "success",
     "fail": "failure",
@@ -25,6 +30,15 @@ VERDICT_PASSED = {
 
 class ReportError(ValueError):
     """Raised when the Maida sidecar does not satisfy a supported report schema."""
+
+
+def _is_supported_report_version(value: Any) -> bool:
+    if value == LEGACY_REPORT_VERSION:
+        return True
+    if not isinstance(value, str):
+        return False
+    match = SEMANTIC_VERSION.fullmatch(value)
+    return match is not None and int(match.group("major")) == SUPPORTED_REPORT_MAJOR
 
 
 def _finite_number(value: Any, field: str) -> float:
@@ -272,8 +286,10 @@ def build_check_payload(
     report: dict[str, Any], *, head_sha: str, details_url: str
 ) -> dict[str, Any]:
     """Validate *report* and return a completed Checks API request body."""
-    if report.get("report_version") not in SUPPORTED_REPORT_VERSIONS:
-        raise ReportError("report_version must be '1' or '2.0.0'")
+    if not _is_supported_report_version(report.get("report_version")):
+        raise ReportError(
+            "report_version must be legacy '1' or a semantic version with major 2"
+        )
 
     verdict = report.get("verdict")
     if verdict not in VERDICT_CONCLUSIONS:

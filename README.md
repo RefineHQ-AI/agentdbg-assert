@@ -206,7 +206,7 @@ The full list of supported keys is documented in the
 A minimal `.maida/policy.yaml` looks like this:
 
 ```yaml
-version: 2
+version: 2.1
 trials: 3
 fail_fast: true
 metrics:
