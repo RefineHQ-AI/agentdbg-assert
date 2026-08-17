@@ -22,11 +22,9 @@ inputs:
       Maida version to use.
       Could be a version number starting with 'v' or a branch name starting with '@'.
       If a github identifier starts with 'v', use '@' prefix.
-      Otherwise PyPI will be used.
-      Default is "v0.5.0", the first release containing the statistical
-      `maida run` command this action relies on.
+      Otherwise PyPI will be used. Default is "v0.5.2.post1".
     required: false
-    default: 'v0.5.0'
+    default: 'v0.5.2.post1'
   python-version:
     description: 'Python version to use'
     required: false
