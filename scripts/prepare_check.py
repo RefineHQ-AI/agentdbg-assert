@@ -123,7 +123,7 @@ def _summary_v1(report: dict[str, Any], details_url: str) -> str:
 
         lines.append(
             f"| `{_escape_cell(name)}` | **{verdict.upper()}** | "
-            f"{lower:.3f}–{upper:.3f} | {threshold:.3f} |"
+            f"{lower:.3f}-{upper:.3f} | {threshold:.3f} |"
         )
 
     return _summary_footer(lines, report, details_url)
@@ -216,7 +216,7 @@ def _v2_evidence(result: dict[str, Any], field: str) -> str:
                     f"{field}.evidence.observed_rate must be between 0 and 1"
                 )
             return f"observed rate {observed:.3f}; no confidence verdict"
-        return f"one-sided bounds {lower:.3f}–{upper:.3f}"
+        return f"one-sided bounds {lower:.3f}-{upper:.3f}"
 
     if kind == "distributional":
         observed = _finite_number(

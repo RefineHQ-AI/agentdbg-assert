@@ -153,7 +153,7 @@ def test_summary_lists_assertion_verdict_interval_threshold_and_rerun_link():
     summary = payload["output"]["summary"]
     assert "`no_loops`" in summary
     assert "INCONCLUSIVE" in summary
-    assert "0.439–1.000" in summary
+    assert "0.439-1.000" in summary
     assert "0.900" in summary
     assert "3 trials" in summary
     assert "[Re-run this workflow]" in summary
